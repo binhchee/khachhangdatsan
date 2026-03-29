@@ -126,6 +126,21 @@ function render(){
     ).join("") || "<p class='text-gray-400 italic text-sm text-xs text-center'>Chưa có lịch đặt nào.</p>";
 }
 render();
+
+    function guiDonHang() {
+    const tenKhach = document.getElementById('name').value;
+    const gioDat = document.getElementById('time').value;
+
+    // Lệnh này đẩy dữ liệu lên Cloud
+    refDonHang.push({
+        khachHang: tenKhach,
+        thoiGian: gioDat,
+        trangThai: "Chờ xác nhận",
+        ngayTao: new Date().toLocaleString()
+    });
+    alert("Đặt sân thành công! Chờ Admin duyệt.");
+}
+    
 </script>
 </body>
 
