@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ĐẶT SÂN BÓNG - KHACH HANG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+</head>
+<body class="bg-gray-100 pb-20">
+
+<div id="khach" class="p-6 max-w-md mx-auto">
+    <h2 class="text-2xl font-bold mb-4 text-center text-blue-800">🏟️ Đặt Sân Bóng Sân 7</h2>
+    <div class="bg-white p-4 rounded-xl shadow-md border-t-4 border-blue-600">
+        <input id="name" placeholder="Tên khách hàng" class="border p-2 w-full mb-2 rounded">
+        <input id="phone" placeholder="Số điện thoại" class="border p-2 w-full mb-2 rounded">
+        <input id="account" placeholder="Số tài khoản (để hoàn tiền)" class="border p-2 w-full mb-2 rounded">
+        <div class="grid grid-cols-2 gap-2">
+            <input id="date" type="date" class="border p-2 w-full mb-2 rounded">
+            <input id="time" type="time" onchange="updateOnlinePrice()" class="border p-2 w-full mb-2 rounded" step="1800">
+        </div>
+        <select id="field" class="border p-2 w-full mb-2 rounded">
+            <option>Sân 1</option>
+            <option>Sân 2</option>
+            <option>Sân 3</option>
+        </select>
+        <select id="payment" onchange="updateOnlinePrice()" class="border p-2 w-full mb-4 rounded bg-yellow-50 font-bold">
+            <option value="later">Thanh toán tại sân (Trả sau)</option>
+            <option value="deposit">Đặt cọc trước 150k (giảm 20k)</option>
+            <option value="online">Thanh toán Online 100% (giảm 30k)</option>
+        </select>
+        <div id="priceNote" class="text-sm mb-4 font-bold text-blue-600 italic"></div>
+        <button onclick="book()" class="bg-blue-700 text-white p-3 w-full rounded-lg font-bold hover:bg-blue-800 transition">XÁC NHẬN ĐẶT SÂN</button>
+        <div id="qrContainerCustomer" class="mt-4 flex flex-col items-center"></div>
+    </div>
+
+    <h3 class="font-bold mt-6 mb-2 text-gray-700">📅 Lịch sân đã được đặt:</h3>
+    <div id="customerSchedule" class="text-xs grid gap-2"></div>
+</div>
+
+<script>
+let db = JSON.parse(localStorage.getItem("db")) || [];
+
+function save(){ localStorage.setItem("db", JSON.stringify(db)); render(); }
+function parseDateTime(date, time){ return new Date(date + "T" + time); }
+
+function updateOnlinePrice() {
+    let timeVal = document.getElementById('time').value;
+    let payMethod = document.getElementById('payment').value;
+    let note = document.getElementById('priceNote');
+    if (!timeVal) return;
+    let [hour] = timeVal.split(":").map(Number);
+    if (payMethod === "online") {
+        let price = (hour >= 16) ? 420000 : 320000;
+        note.innerText = `💰 Số tiền thanh toán Online: ${price.toLocaleString()}đ (Đã giảm 30k)`;
+    } else if (payMethod === "deposit") {
+        note.innerText = `💰 Tiền cọc: 130.000đ (Đã giảm 20k tiền sân)`;
+    } else {
+        note.innerText = "";
+    }
+}
+
+function showQR(text, containerId){
+    let container = document.getElementById(containerId);
+    container.innerHTML = "";
+    let qr = document.createElement("canvas");
+    new QRious({element: qr, value:text, size:200});
+    container.appendChild(qr);
+}
+
+function book(){
+    let b = {
+        id: Date.now(),
+        name: document.getElementById('name').value,
+        phone: document.getElementById('phone').value,
+        account: document.getElementById('account').value,
+        date: document.getElementById('date').value,
+        time: document.getElementById('time').value,
+        field: document.getElementById('field').value,
+        payment: document.getElementById('payment').value,
+        services:[],
+        status:"Đang chạy"
+    };
+    if(!b.name || !b.date || !b.time){ alert("❌ Vui lòng điền đủ thông tin!"); return; }
+    let min = parseInt(b.time.split(":")[1]);
+    if(min !== 0 && min !== 30){ alert("❌ Chọn giờ đúng 00 hoặc 30 phút!"); return; }
+    let bookingTime = parseDateTime(b.date, b.time);
+    let clash = db.find(x=>{
+        if(x.field!=b.field) return false;
+        let xTime = parseDateTime(x.date, x.time);
+        return Math.abs(xTime - bookingTime)/60000 < 90;
+    });
+    if(clash){ alert("❌ Trùng lịch hoặc chưa cách 1h30!"); return; }
+    db.push(b);
+    save();
+    if(b.payment!=="later"){
+        let amount = 0;
+        let [hour] = b.time.split(":").map(Number);
+        if(b.payment=="deposit") amount = 130000;
+        else if(b.payment=="online") amount = (hour >= 16) ? 420000 : 320000;
+        showQR(`Chuyen tien SoccerPro: ${amount}đ - ${b.name}`, "qrContainerCustomer");
+        let container = document.getElementById("qrContainerCustomer");
+        let payBtn = document.createElement("button");
+        payBtn.innerText = `Đã chuyển (10:00)`;
+        payBtn.className = "bg-green-600 text-white px-4 py-2 mt-2 rounded-full font-bold shadow";
+        container.appendChild(payBtn);
+        let timeLeft = 600;
+        let timer = setInterval(()=>{
+            let m = Math.floor(timeLeft/60), s = timeLeft%60;
+            payBtn.innerText = `Xác nhận đã chuyển (${m}:${s<10?'0'+s:s})`;
+            if(--timeLeft<0){ 
+                clearInterval(timer); db = db.filter(x=>x.id!=b.id); 
+                save(); container.innerHTML=''; alert("Hết hạn thanh toán!"); 
+            }
+        },1000);
+        payBtn.onclick = ()=>{ 
+            clearInterval(timer); b.status = "Chờ NV xác nhận"; save(); 
+            container.innerHTML='<p class="text-green-600 font-bold p-3 bg-green-50 rounded mt-2 text-center">✅ Đã gửi xác nhận tới NV!</p>';
+        }
+    } else { alert("✅ Đặt thành công!"); }
+}
+
+function render(){
+    document.getElementById('customerSchedule').innerHTML = db.map(b => 
+        `<div class='bg-blue-50 p-2 rounded border border-blue-100 text-xs'>📌 <b>${b.field}</b>: ${b.time} (${b.date})</div>`
+    ).join("") || "<p class='text-gray-400 italic text-sm text-xs text-center'>Chưa có lịch đặt nào.</p>";
+}
+render();
+</script>
+</body>
+</html>
